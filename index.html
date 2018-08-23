@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Page Title</title>
+    <link rel="stylesheet" href="/css/reset.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+</head>
+<body>
+    This is a served html file!
+
+    <ul id='rooms'>
+        <li><button id='R1'>Room 1: 0/4</button></li>
+        <li><button id='R2'>Room 2: 0/4</button></li>
+        <li><button id='R3'>Room 3: 0/4</button></li>
+        <li><button id='R4'>Room 4: 0/4</button></li>
+    </ul>
+
+    <script src="/dist/jquery.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script> 
+        var socket = io();
+        var $rooms = $('#rooms li');
+
+        $rooms.on('click', function(e){
+            var selectedRoom = e.target.id;
+            socket.emit('requestRoom', selectedRoom);
+        });
+        
+    </script>
+</body>
+</html>
