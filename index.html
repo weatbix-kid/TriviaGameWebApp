@@ -12,22 +12,54 @@
     This is a served html file!
 
     <ul id='rooms'>
-        <li><button id='R1'>Room 1: 0/4</button></li>
-        <li><button id='R2'>Room 2: 0/4</button></li>
-        <li><button id='R3'>Room 3: 0/4</button></li>
-        <li><button id='R4'>Room 4: 0/4</button></li>
+        <li><button id='R0'>Room 1: 0/4</button></li>
+        <li><button id='R1'>Room 2: 0/4</button></li>
+        <li><button id='R2'>Room 3: 0/4</button></li>
+        <li><button id='R3'>Room 4: 0/4</button></li>
     </ul>
+
+    <button id='refresh'>Refresh</button>
+
+    <p id='join-status'></p>
 
     <script src="/dist/jquery.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>
     <script> 
-        var socket = io();
+        // var socket = io();
+        var socket = io({transports: ['websocket'], upgrade: false});
         var $rooms = $('#rooms li');
+        var $joinStatus = $('#join-status');
+        var $refresh = $('#refresh');
+
+        $(document).ready(function() {
+            refreshRooms();
+        });
 
         $rooms.on('click', function(e){
             var selectedRoom = e.target.id;
-            socket.emit('requestRoom', selectedRoom);
+            socket.emit('requestRoom', selectedRoom, function(status){
+                console.log('Space in room:' + status);
+                if(!status)
+                    $joinStatus.text('Unable to join');
+                else
+                    $joinStatus.text('Succefully joined');
+                    refreshRooms();
+            });
         });
+
+        $refresh.on('click', function(){
+            refreshRooms();
+        });
+
+        function refreshRooms() {
+            socket.emit('refreshRooms', function(callback){
+                console.log('Player counts: ' + callback)
+
+                $rooms.each(function( index ) {
+                    $(this).children().text('Room ' + (index+1) +': ' + callback[index] + '/4');
+                });
+            });
+        }
         
     </script>
 </body>
