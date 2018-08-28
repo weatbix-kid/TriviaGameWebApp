@@ -20,8 +20,11 @@ socket.on('connection', function(clientSocket){
         if (!socket.sockets.adapter.rooms[selectedRoom]){
             // Create and join the room
             clientSocket.join(selectedRoom);
+            clientSocket.currentRoom = selectedRoom;
+            console.log(clientSocket.currentRoom);
             joinedRoom(true);
             console.log('A user created and joined room ' + selectedRoom)
+            socket.to(selectedRoom).emit('playersInRoom', returnRoomPlayerCount());
         }
         else {
             // If the room exists
@@ -30,7 +33,10 @@ socket.on('connection', function(clientSocket){
             // Check for space
             if (socket.sockets.adapter.rooms[selectedRoom].length <= 3 ){
                 clientSocket.join(selectedRoom);
+                clientSocket.currentRoom = selectedRoom;
+                console.log(clientSocket.currentRoom);
                 joinedRoom(true);
+                socket.to(selectedRoom).emit('playersInRoom', returnRoomPlayerCount());
             }
             else {
                 console.log('User tryed to join ' + selectedRoom + ' but its full')
@@ -39,25 +45,41 @@ socket.on('connection', function(clientSocket){
         }
     });
 
+    clientSocket.on('leaveRoom',function(){
+        console.log('Player leaving ' + clientSocket.currentRoom);
+        clientSocket.leave(clientSocket.currentRoom);
+        console.log('leaving ' + clientSocket.currentRoom);
+        socket.to(clientSocket.currentRoom).emit('playersInRoom', returnRoomPlayerCount());
+        clientSocket.currentRoom = null;
+        console.log('Player left, currentRoom: ' + clientSocket.currentRoom);
+    })
+
     clientSocket.on('refreshRooms', function(data){
-        var roomsDict = socket.sockets.adapter.rooms;
-        var totalRooms = Object.keys(roomsDict).length;
-        var individualRoomPlayerCounts = [0, 0, 0, 0];
-
-        // Do atleast 5 loops otherwise do the amount of total rooms
-        for (let i = 0; i <= 3 || i <= totalRooms; i++) {
-
-            // If room exists
-            if(socket.sockets.adapter.rooms['R' + i]){
-
-                // Replace the current index with the room length
-                individualRoomPlayerCounts.splice(i, 1, socket.sockets.adapter.rooms['R' + i].length);
-            }
-        }
         // Return player room lengths via callback
-        data(individualRoomPlayerCounts);
+        data(returnRoomPlayerCount());
     });
+
+    clientSocket.on('disconnect', function(){
+        clientSocket.leave(clientSocket.currentRoom);
+        socket.to(clientSocket.currentRoom).emit('playersInRoom', returnRoomPlayerCount());
+    })
 });
+
+function returnRoomPlayerCount() {
+    var roomsDict = socket.sockets.adapter.rooms;
+    var totalRooms = Object.keys(roomsDict).length;
+    var individualRoomPlayerCounts = [0, 0, 0, 0];
+
+    // Do atleast 5 loops otherwise do the amount of total rooms
+    for (let i = 0; i <= 3 || i <= totalRooms; i++) {
+        // If room exists
+        if(socket.sockets.adapter.rooms['R' + i]){
+            // Replace the current index with the room length
+            individualRoomPlayerCounts.splice(i, 1, socket.sockets.adapter.rooms['R' + i].length);
+        }
+    }
+    return(individualRoomPlayerCounts);
+}
 
 // Start the server
 server.listen(3000, function(){
