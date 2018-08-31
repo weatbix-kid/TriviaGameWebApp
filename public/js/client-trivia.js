@@ -8,6 +8,8 @@ var $leave = $('#leave')
 
 var $game = $('.game-screen');
 var $players = $('#players');
+var $playersUnready = $('#players-unready');
+var $ready = $('#ready-status');
 
 var currentRoom = null;
 
@@ -23,35 +25,40 @@ $rooms.on('click', function(e){
     if (selectedRoom != ''){
         socket.emit('requestRoom', selectedRoom, function(status){
             if(!status) {
-                console.log('Cannot join room, capacity reached');
                 $joinStatus.text('Unable to join');
             }
             else {
                 currentRoom = selectedRoom.charAt(1);
-                console.log('Sucessful join to ' + currentRoom);
                 $lobby.hide();
                 $game.show();
-                // refreshRooms();
             }
         });
     }
 })
 
 socket.on('playersInRoom', function(playerCount){
-    // console.log(playerCount);
-    // console.log(playerCount[currentRoom]);
-
     $players.empty();
-
     for (let index = 0; index < playerCount[currentRoom]; index++) {
-        console.log('Player ' + (index+1));
         $players.append('<li>Player ' + (index+1) + '</li>');
     }
-    
 });
+
+socket.on('totalPlayersReady', function(playerReadyCount){
+    console.log(playerReadyCount);
+    $playersUnready.text(playerReadyCount);
+});
+
+$ready.on('click', function(){
+    // Send event to server to toggle ready status and check that all players are ready
+    socket.emit('toggleReadyStatus');
+    $(this).text(function(e, text){
+        return text === "Ready" ? "Unready" : "Ready";
+    })
+})
 
 $leave.on('click', function(){
     socket.emit('leaveRoom');
+    $ready.text('Ready');
     refreshRooms();
     $game.hide();
     $lobby.show();         
@@ -64,7 +71,6 @@ $refresh.on('click', function(){
 // On click return player counts per room
 function refreshRooms() {
     socket.emit('refreshRooms', function(callback){
-        console.log(callback);
         $rooms.each(function( index ) {
             $(this).children().text('Room ' + (index+1) +': ' + callback[index] + '/4');
         });
