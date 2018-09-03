@@ -26,7 +26,7 @@ socket.on('connection', function(clientSocket){
             clientSocket.currentRoom = selectedRoom;
             joinedRoom(true);
             console.log('A user created and joined room ' + selectedRoom)
-            socket.to(selectedRoom).emit('playersInRoom', returnRoomPlayerCount());
+            socket.to(selectedRoom).emit('playersInRoom', returnRoomsPlayerCount());
             socket.to(selectedRoom).emit('totalPlayersReady', returnTotalPlayersReady(selectedRoom));
         }
         else {
@@ -38,7 +38,7 @@ socket.on('connection', function(clientSocket){
                 clientSocket.join(selectedRoom);
                 clientSocket.currentRoom = selectedRoom;
                 joinedRoom(true);
-                socket.to(selectedRoom).emit('playersInRoom', returnRoomPlayerCount());
+                socket.to(selectedRoom).emit('playersInRoom', returnRoomsPlayerCount());
                 socket.to(selectedRoom).emit('totalPlayersReady', returnTotalPlayersReady(selectedRoom));
             }
             else {
@@ -48,6 +48,11 @@ socket.on('connection', function(clientSocket){
         }
     });
 
+    clientSocket.on('refreshRooms', function(data){
+        // Return player room lengths via callback
+        data(returnRoomsPlayerCount());
+    });
+
     clientSocket.on('toggleReadyStatus', function(){
         // Toggle socket ready status for current player
         if(clientSocket.readyStatus == false)
@@ -55,14 +60,28 @@ socket.on('connection', function(clientSocket){
         else
             clientSocket.readyStatus = false;
 
-        // Notify total amount of players ready in the sockets room
-        socket.to(clientSocket.currentRoom).emit('totalPlayersReady', returnTotalPlayersReady(clientSocket.currentRoom));
+        // Decide Wether to start game in 5s, 15s or notify player counts
+        var playersInRoom = returnTotalPlayersReady(clientSocket.currentRoom);
+        if (playersInRoom[0] === playersInRoom[1]){
+            console.log('All players are ready!');
+            socket.to(clientSocket.currentRoom).emit('totalPlayersReady', returnTotalPlayersReady(clientSocket.currentRoom));
+        }
+        else{
+            if (playersInRoom[0] >= (playersInRoom[1]-1)){
+                console.log('Majority players are ready!');
+                socket.to(clientSocket.currentRoom).emit('totalPlayersReady', returnTotalPlayersReady(clientSocket.currentRoom));
+            }
+            else{
+                console.log('Not enough players ready');
+                socket.to(clientSocket.currentRoom).emit('totalPlayersReady', returnTotalPlayersReady(clientSocket.currentRoom));
+            }
+        }
     });
 
     clientSocket.on('leaveRoom',function(){
         // Leave the room and notify the room of multiple changes
         clientSocket.leave(clientSocket.currentRoom);
-        socket.to(clientSocket.currentRoom).emit('playersInRoom', returnRoomPlayerCount());
+        socket.to(clientSocket.currentRoom).emit('playersInRoom', returnRoomsPlayerCount());
         socket.to(clientSocket.currentRoom).emit('totalPlayersReady', returnTotalPlayersReady(clientSocket.currentRoom));
 
         // Reset the sockets properties
@@ -70,20 +89,15 @@ socket.on('connection', function(clientSocket){
         clientSocket.readyStatus = false;
     });
 
-    clientSocket.on('refreshRooms', function(data){
-        // Return player room lengths via callback
-        data(returnRoomPlayerCount());
-    });
-
     clientSocket.on('disconnect', function(){
         // Leave the room and notify the room of multiple changes
         clientSocket.leave(clientSocket.currentRoom);
-        socket.to(clientSocket.currentRoom).emit('playersInRoom', returnRoomPlayerCount());
+        socket.to(clientSocket.currentRoom).emit('playersInRoom', returnRoomsPlayerCount());
         socket.to(clientSocket.currentRoom).emit('totalPlayersReady', returnTotalPlayersReady(clientSocket.currentRoom));
     });
 });
 
-function returnRoomPlayerCount() {
+function returnRoomsPlayerCount() {
     let roomsDictObj = socket.sockets.adapter.rooms;
     let totalRooms = Object.keys(roomsDictObj).length;
     let individualRoomPlayerCounts = [0, 0, 0, 0];
@@ -114,14 +128,13 @@ function returnTotalPlayersReady(roomName) {
         }
 
         // For each player check readyStatus
-        console.log('Ready status of players in ' + roomName + ':');
         for (let player of players) {
-            console.log(player.id + ': ' + player.readyStatus);
             if(player.readyStatus == true)
                 playersReady.push(player.readyStatus);
         }
     }
-    return(playersReady.length +'/' + players.length + ' players are ready');
+    return([playersReady.length, players.length]);
+    // return(playersReady.length +'/' + players.length + ' players are ready');
 }
 
 // Start the server

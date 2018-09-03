@@ -10,6 +10,7 @@ var $game = $('.game-screen');
 var $players = $('#players');
 var $playersUnready = $('#players-unready');
 var $ready = $('#ready-status');
+var $timeleft = $('#timeleft');
 
 var currentRoom = null;
 
@@ -45,7 +46,7 @@ socket.on('playersInRoom', function(playerCount){
 
 socket.on('totalPlayersReady', function(playerReadyCount){
     console.log(playerReadyCount);
-    $playersUnready.text(playerReadyCount);
+    $playersUnready.text(playerReadyCount[0] + '/' + playerReadyCount[1] + ' players are ready');
 });
 
 $ready.on('click', function(){
