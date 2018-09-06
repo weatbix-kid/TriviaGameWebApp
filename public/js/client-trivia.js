@@ -7,10 +7,12 @@ var $refresh = $('#refresh')
 var $leave = $('#leave')
 
 var $game = $('.game-screen');
+var $waitingRoom = $('.waiting-room');
+var $newRound = $('.new-round');
 var $players = $('#players');
 var $playersUnready = $('#players-unready');
 var $ready = $('#ready-status');
-var $timeleft = $('#timeleft');
+var $gameStartNotice = $('#gamestart-notice');
 
 var currentRoom = null;
 
@@ -49,6 +51,18 @@ socket.on('totalPlayersReady', function(playerReadyCount){
     $playersUnready.text(playerReadyCount[0] + '/' + playerReadyCount[1] + ' players are ready');
 });
 
+socket.on('notifyGameState', function(msg){
+    if(!msg)
+        $gameStartNotice.text('');
+    else
+        $gameStartNotice.text(msg)
+})
+
+socket.on('startGame', function(){
+    $waitingRoom.hide();
+    $newRound.show();
+});
+
 $ready.on('click', function(){
     // Send event to server to toggle ready status and check that all players are ready
     socket.emit('toggleReadyStatus');
@@ -71,9 +85,18 @@ $refresh.on('click', function(){
 
 // On click return player counts per room
 function refreshRooms() {
-    socket.emit('refreshRooms', function(callback){
-        $rooms.each(function( index ) {
-            $(this).children().text('Room ' + (index+1) +': ' + callback[index] + '/4');
+    socket.emit('refreshRooms', function(count, gameState){
+        $rooms.each(function(index) {
+            if (count[index] != 4 && gameState[index] != true){
+                $(this).children().text('Room ' + (index+1) +': ' + count[index] + '/4');
+                $(this).children().prop('disabled',false);
+            }
+            else {
+                $(this).children().text('Room ' + (index+1) +': ' + count[index] + '/4');
+                $(this).children().prop('disabled',true);
+                if(gameState[index] == true)
+                    $(this).children().text('Room ' + (index+1) +': In-Game');
+            }
         });
     });
 }
