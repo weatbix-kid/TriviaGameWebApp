@@ -65,9 +65,26 @@ socket.on('notifyGameState', function(msg){
         $gameStartNotice.text(msg)
 })
 
-socket.on('startGame', function(newRoundData){
+// socket.on('startGame', function(newRoundData){
+//     $waitingRoom.hide();
+//     $newRound.show();
+//     console.log(newRoundData);
+//     populateRoundForm(newRoundData)
+// });
+
+socket.on('startGame', function(){
     $waitingRoom.hide();
+    $wait.show();
+});
+
+socket.on('showResults', function(){
+    $newRound.hide();
+    $wait.show();
+});
+
+socket.on('newRound', function(newRoundData){
     $newRound.show();
+    $wait.hide();
     console.log(newRoundData);
     populateRoundForm(newRoundData)
 });

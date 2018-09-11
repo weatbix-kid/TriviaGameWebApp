@@ -64,7 +64,6 @@ class Round {
 
 RoomTimers = [];
 Rooms = [null, null, null, null];
-TestTimer = null;
 
 // Socket.io connections
 socket.on('connection', function(clientSocket){
@@ -122,7 +121,6 @@ socket.on('connection', function(clientSocket){
         // Decide Wether to start game in 5s or notify player counts
         let playersInRoom = returnTotalPlayersReady(clientSocket.currentRoom);
         let selectedRoomIndex = clientSocket.currentRoom.charAt(1);
-
         // Checks if ready players = total players 
         if (playersInRoom[0] === playersInRoom[1]){
             console.log('All players are ready!');
@@ -130,13 +128,26 @@ socket.on('connection', function(clientSocket){
             socket.to(clientSocket.currentRoom).emit('notifyGameState', 'Game Commencing in 5s');
 
             // Creates a new 5 second timer for a specific room (index)  
+            // RoomTimers.splice(clientSocket.currentRoom[1], 1, setTimeout(function(){
             console.log('Started ready timer for room ' + selectedRoomIndex)
-            RoomTimers.splice(selectedRoomIndex, 1, setTimeout(function(){
-                console.log('Game Started');
-                console.log('Initating game loop');
-                socket.to(clientSocket.currentRoom).emit('startGame'); 
-                RoomTimers.splice(selectedRoomIndex, 1, setInterval(initiateGameLoop, 10000));
+            RoomTimers.splice(selectedRoomIndex, 1, setTimeout(function(){  
+                console.log('Commencing game! /n ' + Rooms[selectedRoomIndex].state + '/n '+ Rooms[selectedRoomIndex].round + '/n '+ Rooms[selectedRoomIndex].roundNumber)
+
+                var newRound = new Round('Is this a placeholder question?', ['Yes', 'No', 'Maybe', 'I Dont Know'], 2);
+                Rooms[selectedRoomIndex].state = 'in-game';
+                Rooms[selectedRoomIndex].round = newRound;
+                Rooms[selectedRoomIndex].incrementRoundNum();
+                console.log('New stuff! /n ' + Rooms[selectedRoomIndex].state + '/n '+ Rooms[selectedRoomIndex].round + '/n '+ Rooms[selectedRoomIndex].roundNumber)
+                socket.to(clientSocket.currentRoom).emit('startGame', newRound);  
+
+                console.log('Started round timer for room ' + selectedRoomIndex)
+                // Player answer timer
+                RoomTimers.splice(selectedRoomIndex, 1, setTimeout(function(){  
+                    console.log(selectedRoomIndex + ' timed out!')
+                    socket.to(clientSocket.currentRoom).emit('newRound', newRound);  
+                }, 15000));
             }, 5000));
+
         }
         else {
             console.log('Canceling ready timer for room ' + selectedRoomIndex)
@@ -148,29 +159,6 @@ socket.on('connection', function(clientSocket){
             clearTimeout(RoomTimers[selectedRoomIndex]);
         }
     });
-
-    function initiateGameLoop(){
-        let selectedRoomIndex = clientSocket.currentRoom.charAt(1);
-
-        console.log('---');
-        console.log('Emit show result/wait room'); 
-        socket.to(clientSocket.currentRoom).emit('showResults'); 
-        console.log('emitting new round in 5');
-        TestTimer = setTimeout(function(){ 
-            if(Rooms[selectedRoomIndex].roundNumber <= 3){ // Does 4 rounds
-                var newRound = new Round('Is this a placeholder question?', ['Yes', 'No', 'Maybe', 'I Dont Know'], 2);
-                Rooms[selectedRoomIndex].state = 'in-game';
-                Rooms[selectedRoomIndex].round = newRound;
-                Rooms[selectedRoomIndex].incrementRoundNum();
-                console.log('New stuff! /n ' + Rooms[selectedRoomIndex].state + '/n '+ Rooms[selectedRoomIndex].round + '/n '+ Rooms[selectedRoomIndex].roundNumber)
-                socket.to(clientSocket.currentRoom).emit('newRound', newRound);  
-            }
-            else {
-                clearInterval(RoomTimers[selectedRoomIndex]);
-                console.log('Game ended')
-            }
-        }, 5000)
-    }
 
     clientSocket.on('roundResponse', function(clientResponse, callback){
         let selectedRoomIndex = clientSocket.currentRoom.charAt(1);
