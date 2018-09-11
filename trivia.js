@@ -13,23 +13,63 @@ app.get('/', function(req, res){
     res.sendFile(__dirname + '/index.html');
 });
 
-var RoomProps = function(room){
-    this.name = room,
-    this.connectedSockets = getConnectedSockets(this.name),
-    this.state = 'lobby',
-    this.round = 0
-    this.refresh = function(){
-        this.connectedSockets = getConnectedSockets(this.name)
+// var RoomProps = function(_name){
+//     this.name = _name,
+//     this.connectedSockets = getConnectedSockets(this.name),
+//     this.state = 'lobby',
+//     this.round = null,
+//     this.roundNumber = 0,
+//     this.refresh = function(){
+//         this.connectedSockets = getConnectedSockets(this.name)
+//     }
+// };
+
+class RoomProps {
+    constructor(name){
+        this._name = name;
+        this._connectedSockets = getConnectedSockets(name);
+        this._state = 'lobby';
+        this._round = null;
+        this._roundNumber = 0;
     }
+
+    refresh(){
+        this._connectedSockets = getConnectedSockets(this.name);
+    }
+
+    incrementRoundNum(){
+        this._roundNumber++;
+    }
+
+    set state(newState){ this._state = newState; }
+    set round(newRound){ this._round = newRound; }
+    set roundNumber(number){ this._roundNumber = number; }
+
+    get state(){ return this._state; }
+    get round(){ return this._round; }
+    get roundNumber(){ return this._roundNumber }
 };
 
+class Round {
+    constructor(question, answers, correctAnswer){
+        this._question = question;
+        this._answers = answers;
+        this._correctAnswer = correctAnswer;
+    }
+
+    get question(){ return this._question; }
+    get answers(){ return this._answers; }
+    get correctAnswer(){ return this._correctAnswer }
+}
+
 RoomTimers = [];
-Rooms = [];
+Rooms = [null, null, null, null];
 
 // Socket.io connections
 socket.on('connection', function(clientSocket){
     clientSocket.currentRoom = null;
     clientSocket.readyStatus = false;
+    clientSocket.score = 0;
 
     clientSocket.on('requestRoom', function(selectedRoom, joinedRoom){
         let selectedRoomIndex = selectedRoom.charAt(1);
@@ -49,6 +89,7 @@ socket.on('connection', function(clientSocket){
             console.log('A user requested to join room ' + selectedRoom)
 
             // Check wether there is space in the room and that it is not in progress
+            // Eventaully will use Room obj
             // if(Rooms[selectedRoomIndex].connectedSockets.length <= 3 && Rooms[selectedRoomIndex].state != 'in-game'){
             if (socket.sockets.adapter.rooms[selectedRoom].length <= 3 && Rooms[selectedRoomIndex].state != 'in-game'){
                 clientSocket.join(selectedRoom);
@@ -67,7 +108,7 @@ socket.on('connection', function(clientSocket){
 
     clientSocket.on('refreshRooms', function(data){
         // Return player room lengths via callback
-        data(returnRoomsPlayerCount(), returnRoomsInGame());
+        data(returnRoomsPlayerCount(), returnActiveGames());
     });
 
     clientSocket.on('toggleReadyStatus', function(){
@@ -78,32 +119,62 @@ socket.on('connection', function(clientSocket){
             clientSocket.readyStatus = false;
 
         // Decide Wether to start game in 5s or notify player counts
-        var playersInRoom = returnTotalPlayersReady(clientSocket.currentRoom);
+        let playersInRoom = returnTotalPlayersReady(clientSocket.currentRoom);
+        let selectedRoomIndex = clientSocket.currentRoom.charAt(1);
+        // Checks if ready players = total players 
         if (playersInRoom[0] === playersInRoom[1]){
             console.log('All players are ready!');
             socket.to(clientSocket.currentRoom).emit('totalPlayersReady', returnTotalPlayersReady(clientSocket.currentRoom));
             socket.to(clientSocket.currentRoom).emit('notifyGameState', 'Game Commencing in 5s');
-            
-            // Start 5s timer for specific room 
-            console.log('Starting timer of room ' + clientSocket.currentRoom)
 
             // Creates a new 5 second timer for a specific room (index)  
-            RoomTimers.splice(clientSocket.currentRoom[1], 1, setTimeout(function(){ 
-                console.log('Commencing game!')
-                Rooms[clientSocket.currentRoom.charAt(1)].state = 'in-game';
-                socket.to(clientSocket.currentRoom).emit('startGame'); 
+            // RoomTimers.splice(clientSocket.currentRoom[1], 1, setTimeout(function(){
+            console.log('Started ready timer for room ' + selectedRoomIndex)
+            RoomTimers.splice(selectedRoomIndex, 1, setTimeout(function(){  
+                console.log('Commencing game! /n ' + Rooms[selectedRoomIndex].state + '/n '+ Rooms[selectedRoomIndex].round + '/n '+ Rooms[selectedRoomIndex].roundNumber)
+
+                var newRound = new Round('Is this a placeholder question?', ['Yes', 'No', 'Maybe', 'I Dont Know'], 2);
+                Rooms[selectedRoomIndex].state = 'in-game';
+                Rooms[selectedRoomIndex].round = newRound;
+                Rooms[selectedRoomIndex].incrementRoundNum();
+                console.log('New stuff! /n ' + Rooms[selectedRoomIndex].state + '/n '+ Rooms[selectedRoomIndex].round + '/n '+ Rooms[selectedRoomIndex].roundNumber)
+                socket.to(clientSocket.currentRoom).emit('startGame', newRound);  
+
+                console.log('Started round timer for room ' + selectedRoomIndex)
+                // Player answer timer
+                RoomTimers.splice(selectedRoomIndex, 1, setTimeout(function(){  
+                    console.log(selectedRoomIndex + ' timed out!')
+                    socket.to(clientSocket.currentRoom).emit('newRound', newRound);  
+                }, 15000));
             }, 5000));
+
         }
         else {
-            console.log('Not enough players ready');
+            console.log('Canceling ready timer for room ' + selectedRoomIndex)
             socket.to(clientSocket.currentRoom).emit('totalPlayersReady', returnTotalPlayersReady(clientSocket.currentRoom));
             socket.to(clientSocket.currentRoom).emit('notifyGameState');
             // Stop timer for specific room
-            console.log('Stopping timer of room ' + clientSocket.currentRoom)
 
             // Stops the 5 second timer if readyplayers != total players
-            clearTimeout(RoomTimers[clientSocket.currentRoom[1]]);
+            clearTimeout(RoomTimers[selectedRoomIndex]);
         }
+    });
+
+    clientSocket.on('roundResponse', function(clientResponse, callback){
+        let selectedRoomIndex = clientSocket.currentRoom.charAt(1);
+        let answer = clientResponse.charAt(1);
+
+        console.log('Recieved response from ' + clientSocket.currentRoom + ': ' + answer);
+        var currentRound = Rooms[selectedRoomIndex].round;
+        if(currentRound.correctAnswer == answer){
+            console.log('Correct!')
+            clientSocket.score++;
+            console.log(clientSocket.score);
+        }
+        else{
+            // console.log('Incorrect!!')
+        }
+        callback(true);
     });
 
     clientSocket.on('leaveRoom',function(){
@@ -118,6 +189,7 @@ socket.on('connection', function(clientSocket){
         // Reset the client socket's properties
         clientSocket.currentRoom = null;
         clientSocket.readyStatus = false;
+        clientSocket.score = 0;
     });
 
     clientSocket.on('disconnect', function(){
@@ -128,7 +200,6 @@ socket.on('connection', function(clientSocket){
             socket.to(clientSocket.currentRoom).emit('totalPlayersReady', returnTotalPlayersReady(clientSocket.currentRoom));
             Rooms[clientSocket.currentRoom.charAt(1)].refresh();
         }
-            
     });
 });
 
@@ -148,22 +219,11 @@ function returnRoomsPlayerCount() {
     return(individualRoomPlayerCounts);
 }
 
-function returnRoomsInGame(){
-    let activeRooms = [false, false, false, false];
-    let i = -1;
-    for (let Room of Rooms) {
-        i++
-        if(Room.state === 'in-game')
-        activeRooms.splice(i, 1, true);
-    }
-    return(activeRooms);
-}
-
 function returnTotalPlayersReady(roomName) {
     let players = [];
     let playersReady = [];
     
-    // If the room exists   `
+    // If the room exists
     if(socket.sockets.adapter.rooms[roomName]){
         let roomObj = socket.sockets.adapter.rooms[roomName].sockets;
 
@@ -180,6 +240,20 @@ function returnTotalPlayersReady(roomName) {
         }
     }
     return([playersReady.length, players.length]);
+}
+
+function returnActiveGames(){
+    let activeRooms = [false, false, false, false];
+    let i = -1;
+    for (let Room of Rooms) {
+        i++
+        // If the current index is a room check its state
+        if(Room != null) {
+            if(Room.state === 'in-game')
+            activeRooms.splice(i, 1, true);
+        }
+    }
+    return(activeRooms);
 }
 
 function getConnectedSockets(roomName) {

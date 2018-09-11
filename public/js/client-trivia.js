@@ -14,6 +14,13 @@ var $playersUnready = $('#players-unready');
 var $ready = $('#ready-status');
 var $gameStartNotice = $('#gamestart-notice');
 
+var $roundForm = $('#round-form');
+var $question = $('#q');
+var $answers = $('#ans');
+
+var $wait = $('.wait-screen');
+var $results = $('.results-screen');
+
 var currentRoom = null;
 
 $(document).ready(function() {
@@ -58,9 +65,11 @@ socket.on('notifyGameState', function(msg){
         $gameStartNotice.text(msg)
 })
 
-socket.on('startGame', function(){
+socket.on('startGame', function(newRoundData){
     $waitingRoom.hide();
     $newRound.show();
+    console.log(newRoundData);
+    populateRoundForm(newRoundData)
 });
 
 $ready.on('click', function(){
@@ -83,6 +92,28 @@ $refresh.on('click', function(){
     refreshRooms();
 })
 
+$answers.on('click', function(e){
+    e.preventDefault();
+    var selectedAnswer = e.target.getAttribute('value');
+    if(selectedAnswer != null){
+        console.log(selectedAnswer);
+        socket.emit('roundResponse', selectedAnswer, function(callback){
+            if(callback == true){
+                console.log('Answer recieved from server, wait for new round')
+                $newRound.hide();
+                $wait.show();
+            }
+        })
+    }
+})
+
+function populateRoundForm(roundData){
+    $question.text(roundData._question);
+    $answers.children().each(function(index){
+        $(this).children().text(roundData._answers[index]);
+    });
+}
+
 // On click return player counts per room
 function refreshRooms() {
     socket.emit('refreshRooms', function(count, gameState){
@@ -95,7 +126,7 @@ function refreshRooms() {
                 $(this).children().text('Room ' + (index+1) +': ' + count[index] + '/4');
                 $(this).children().prop('disabled',true);
                 if(gameState[index] == true)
-                    $(this).children().text('Room ' + (index+1) +': In-Game');
+                    $(this).children().text('Room ' + (index+1) +': ' + count[index] + '/4 In-Game');
             }
         });
     });

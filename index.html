@@ -30,8 +30,18 @@
         </div>
         <div class='new-round' style='display:none'>
             <p>this is a round screen</p>
+            <form id='round-form'>
+                <p id='q'>question</p>
+                <ul id='ans'>
+                    <li><button name='answer' value='a0'>answer 1</button></li>
+                    <li><button name='answer' value='a1'>answer 2</button></li>
+                    <li><button name='answer' value='a2'>answer 3</button></li>
+                    <li><button name='answer' value='a3'>answer 4</button></li>
+                </ul>
+            </form>
         </div>
-        <div class='round-result'></div>
+        <div class='wait-screen' style='display:none'>Waiting for new round</div>
+        <div class='results-screen' style='display:none'>Results go here:</div>
     </div>
 
     <div class='game-end-screen' style='display:none'></div>
