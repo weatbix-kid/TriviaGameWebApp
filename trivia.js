@@ -13,29 +13,18 @@ app.get('/', function(req, res){
     res.sendFile(__dirname + '/index.html');
 });
 
-// var RoomProps = function(_name){
-//     this.name = _name,
-//     this.connectedSockets = getConnectedSockets(this.name),
-//     this.state = 'lobby',
-//     this.round = null,
-//     this.roundNumber = 0,
-//     this.refresh = function(){
-//         this.connectedSockets = getConnectedSockets(this.name)
-//     }
-// };
-
 class RoomProps {
     constructor(name){
         this._name = name;
-        this._connectedSockets = getConnectedSockets(name);
+        // this._connectedSockets = getConnectedSockets(name);
         this._state = 'lobby';
         this._round = null;
         this._roundNumber = 0;
     }
 
-    refresh(){
-        this._connectedSockets = getConnectedSockets(this.name);
-    }
+    // refresh(){
+    //     this._connectedSockets = getConnectedSockets(this.name);
+    // }
 
     incrementRoundNum(){
         this._roundNumber++;
@@ -48,6 +37,8 @@ class RoomProps {
     get state(){ return this._state; }
     get round(){ return this._round; }
     get roundNumber(){ return this._roundNumber }
+    // get connectedSockets(){ return this._connectedSockets }
+    
 };
 
 class Round {
@@ -62,7 +53,7 @@ class Round {
     get correctAnswer(){ return this._correctAnswer }
 }
 
-RoomTimers = [];
+RoomTimers = [null, null, null, null];
 Rooms = [null, null, null, null];
 TestTimer = null;
 
@@ -96,7 +87,7 @@ socket.on('connection', function(clientSocket){
                 clientSocket.join(selectedRoom);
                 clientSocket.currentRoom = selectedRoom;
                 joinedRoom(true);
-                Rooms[selectedRoomIndex].refresh();
+                // Rooms[selectedRoomIndex].refresh();
                 socket.to(selectedRoom).emit('playersInRoom', returnRoomsPlayerCount());
                 socket.to(selectedRoom).emit('totalPlayersReady', returnTotalPlayersReady(selectedRoom));
             }
@@ -134,6 +125,7 @@ socket.on('connection', function(clientSocket){
             RoomTimers.splice(selectedRoomIndex, 1, setTimeout(function(){
                 console.log('Game Started');
                 console.log('Initating game loop');
+                Rooms[selectedRoomIndex].state = 'in-game';
                 socket.to(clientSocket.currentRoom).emit('startGame'); 
                 RoomTimers.splice(selectedRoomIndex, 1, setInterval(initiateGameLoop, 10000));
             }, 5000));
@@ -151,23 +143,39 @@ socket.on('connection', function(clientSocket){
 
     function initiateGameLoop(){
         let selectedRoomIndex = clientSocket.currentRoom.charAt(1);
+        console.log('initiate game loop index: ' + selectedRoomIndex)
 
         console.log('---');
         console.log('Emit show result/wait room'); 
         socket.to(clientSocket.currentRoom).emit('showResults'); 
         console.log('emitting new round in 5');
         TestTimer = setTimeout(function(){ 
-            if(Rooms[selectedRoomIndex].roundNumber <= 3){ // Does 4 rounds
+            if(Rooms[selectedRoomIndex].roundNumber <= 1){ // 3 means 4 rounds
                 var newRound = new Round('Is this a placeholder question?', ['Yes', 'No', 'Maybe', 'I Dont Know'], 2);
-                Rooms[selectedRoomIndex].state = 'in-game';
+                // Rooms[selectedRoomIndex].state = 'in-game';
                 Rooms[selectedRoomIndex].round = newRound;
                 Rooms[selectedRoomIndex].incrementRoundNum();
                 console.log('New stuff! /n ' + Rooms[selectedRoomIndex].state + '/n '+ Rooms[selectedRoomIndex].round + '/n '+ Rooms[selectedRoomIndex].roundNumber)
                 socket.to(clientSocket.currentRoom).emit('newRound', newRound);  
             }
             else {
-                clearInterval(RoomTimers[selectedRoomIndex]);
-                console.log('Game ended')
+                // Stop all timers
+                clearInterval(RoomTimers[selectedRoomIndex]); // Works now what??
+
+                console.log('Game ended');
+                socket.to(clientSocket.currentRoom).emit('endGame');
+
+                // kick all the players from the room and reset all their individual props
+                kickPlayers(clientSocket.currentRoom);
+                Rooms[selectedRoomIndex].state = 'lobby';
+                // console.log(Rooms[selectedRoomIndex].refresh());
+
+                // This is need to update everything?
+                // socket.to(clientSocket.currentRoom).emit('playersInRoom', returnRoomsPlayerCount());
+                // socket.to(clientSocket.currentRoom).emit('totalPlayersReady', returnTotalPlayersReady(clientSocket.currentRoom));
+
+                // console.log('Should be 0 but idk if I updated it: ' + Rooms['r'+selectedRoomIndex].connectedSockets)
+                // Rooms[clientSocket.currentRoom.charAt(1)].refresh();
             }
         }, 5000)
     }
@@ -191,13 +199,7 @@ socket.on('connection', function(clientSocket){
 
     clientSocket.on('leaveRoom',function(){
         // If client was in a room update changes
-        if(clientSocket.currentRoom != null){
-            clientSocket.leave(clientSocket.currentRoom);
-            socket.to(clientSocket.currentRoom).emit('playersInRoom', returnRoomsPlayerCount());
-            socket.to(clientSocket.currentRoom).emit('totalPlayersReady', returnTotalPlayersReady(clientSocket.currentRoom));
-            Rooms[clientSocket.currentRoom.charAt(1)].refresh();
-        }
-
+        leaveNotifyRoom();
         // Reset the client socket's properties
         clientSocket.currentRoom = null;
         clientSocket.readyStatus = false;
@@ -206,13 +208,50 @@ socket.on('connection', function(clientSocket){
 
     clientSocket.on('disconnect', function(){
         // If client was in a room update changes
+        leaveNotifyRoom();
+
+        // if(clientSocket.currentRoom != null){
+        //     clientSocket.leave(clientSocket.currentRoom);
+        //     socket.to(clientSocket.currentRoom).emit('playersInRoom', returnRoomsPlayerCount());
+        //     socket.to(clientSocket.currentRoom).emit('totalPlayersReady', returnTotalPlayersReady(clientSocket.currentRoom));
+        //     Rooms[clientSocket.currentRoom.charAt(1)].refresh();
+        // }
+    });
+
+    function leaveNotifyRoom(){
         if(clientSocket.currentRoom != null){
             clientSocket.leave(clientSocket.currentRoom);
             socket.to(clientSocket.currentRoom).emit('playersInRoom', returnRoomsPlayerCount());
             socket.to(clientSocket.currentRoom).emit('totalPlayersReady', returnTotalPlayersReady(clientSocket.currentRoom));
-            Rooms[clientSocket.currentRoom.charAt(1)].refresh();
+            // Rooms[clientSocket.currentRoom.charAt(1)].refresh();
         }
-    });
+    }
+
+    function kickPlayers(roomName) {
+        let players = [];
+    
+        // If the room exists
+        if(socket.sockets.adapter.rooms[roomName]){
+            let roomObj = socket.sockets.adapter.rooms[roomName].sockets;
+    
+            // For each socket id in the room
+            for (let id of Object.keys(roomObj)) {
+                // Add player id to players array
+                players.push(socket.sockets.connected[id]);
+            }
+    
+            // AUUGHHG
+            for (let player of players) {
+                // console.log(player.id +' is part of: ' + player.rooms)
+                // Kick those bitches
+                let currentRoomConnection = player.currentRoom;
+                player.leave(currentRoomConnection);
+                player.currentRoom = null;
+                player.readyStatus = false;
+                player.score = 0;
+            }
+        }
+    }
 });
 
 function returnRoomsPlayerCount() {

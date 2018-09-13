@@ -1,14 +1,22 @@
 // var socket = io();
 var socket = io({transports: ['websocket'], upgrade: false});
-var $lobby = $('.lobby-screen');
 var $rooms = $('#rooms li');
 var $joinStatus = $('#join-status');
-var $refresh = $('#refresh')
-var $leave = $('#leave')
+var $refresh = $('#refresh');
+var $leave = $('#leave');
+var $leaveEnd = $('#end-leave');
 
-var $game = $('.game-screen');
+// Main screens
+var $LobbyScreen = $('.lobby-screen');
+var $GameScreen = $('.game-screen');
+var $GameEndScreen = $('.game-end-screen');
+
+// Sub screens
+var $WaitScreen = $('.wait-screen');
+var $ResultsScreen = $('.results-screen');
 var $waitingRoom = $('.waiting-room');
 var $newRound = $('.new-round');
+
 var $players = $('#players');
 var $playersUnready = $('#players-unready');
 var $ready = $('#ready-status');
@@ -18,8 +26,7 @@ var $roundForm = $('#round-form');
 var $question = $('#q');
 var $answers = $('#ans');
 
-var $wait = $('.wait-screen');
-var $results = $('.results-screen');
+
 
 var currentRoom = null;
 
@@ -39,8 +46,9 @@ $rooms.on('click', function(e){
             }
             else {
                 currentRoom = selectedRoom.charAt(1);
-                $lobby.hide();
-                $game.show();
+                $LobbyScreen.hide();
+                $GameScreen.show();
+                $waitingRoom.show();
             }
         });
     }
@@ -73,18 +81,29 @@ socket.on('notifyGameState', function(msg){
 // });
 
 socket.on('startGame', function(){
+    // $ready.text('Unready');
+    // $playersUnready.text('');
+    $gameStartNotice.text('');
     $waitingRoom.hide();
-    $wait.show();
+    $WaitScreen.show();
 });
 
 socket.on('showResults', function(){
     $newRound.hide();
-    $wait.show();
+    $WaitScreen.show();
+});
+
+socket.on('endGame', function(){
+    console.log('Got end game')
+    $GameEndScreen.show()
+    $GameScreen.hide()
+    // $WaitScreen.hide() ??
+    // newRound.hide() ??
 });
 
 socket.on('newRound', function(newRoundData){
     $newRound.show();
-    $wait.hide();
+    $WaitScreen.hide();
     console.log(newRoundData);
     populateRoundForm(newRoundData)
 });
@@ -101,8 +120,16 @@ $leave.on('click', function(){
     socket.emit('leaveRoom');
     $ready.text('Ready');
     refreshRooms();
-    $game.hide();
-    $lobby.show();         
+    $GameScreen.hide();
+    $LobbyScreen.show();         
+})
+
+$leaveEnd.on('click', function(){
+    refreshRooms();
+    $WaitScreen.hide();
+    $GameEndScreen.hide();
+    $GameScreen.hide();
+    $LobbyScreen.show();         
 })
 
 $refresh.on('click', function(){
@@ -118,7 +145,7 @@ $answers.on('click', function(e){
             if(callback == true){
                 console.log('Answer recieved from server, wait for new round')
                 $newRound.hide();
-                $wait.show();
+                $WaitScreen.show();
             }
         })
     }
