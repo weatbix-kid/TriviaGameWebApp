@@ -16,15 +16,10 @@ app.get('/', function(req, res){
 class RoomProps {
     constructor(name){
         this._name = name;
-        // this._connectedSockets = getConnectedSockets(name);
         this._state = 'lobby';
         this._round = null;
         this._roundNumber = 0;
     }
-
-    // refresh(){
-    //     this._connectedSockets = getConnectedSockets(this.name);
-    // }
 
     incrementRoundNum(){
         this._roundNumber++;
@@ -37,8 +32,6 @@ class RoomProps {
     get state(){ return this._state; }
     get round(){ return this._round; }
     get roundNumber(){ return this._roundNumber }
-    // get connectedSockets(){ return this._connectedSockets }
-    
 };
 
 class Round {
@@ -81,8 +74,6 @@ socket.on('connection', function(clientSocket){
             console.log('A user requested to join room ' + selectedRoom)
 
             // Check wether there is space in the room and that it is not in progress
-            // Eventaully will use Room obj
-            // if(Rooms[selectedRoomIndex].connectedSockets.length <= 3 && Rooms[selectedRoomIndex].state != 'in-game'){
             if (socket.sockets.adapter.rooms[selectedRoom].length <= 3 && Rooms[selectedRoomIndex].state != 'in-game'){
                 clientSocket.join(selectedRoom);
                 clientSocket.currentRoom = selectedRoom;
@@ -147,7 +138,7 @@ socket.on('connection', function(clientSocket){
 
         console.log('---');
         console.log('Emit show result/wait room'); 
-        socket.to(clientSocket.currentRoom).emit('showResults'); 
+        socket.to(clientSocket.currentRoom).emit('showResults', returnPlayerScores(clientSocket.currentRoom));
         console.log('emitting new round in 5');
         TestTimer = setTimeout(function(){ 
             if(Rooms[selectedRoomIndex].roundNumber <= 1){ // 3 means 4 rounds
@@ -163,19 +154,11 @@ socket.on('connection', function(clientSocket){
                 clearInterval(RoomTimers[selectedRoomIndex]); // Works now what??
 
                 console.log('Game ended');
-                socket.to(clientSocket.currentRoom).emit('endGame');
+                socket.to(clientSocket.currentRoom).emit('endGame', returnPlayerScores(clientSocket.currentRoom));
 
                 // kick all the players from the room and reset all their individual props
                 kickPlayers(clientSocket.currentRoom);
                 Rooms[selectedRoomIndex].state = 'lobby';
-                // console.log(Rooms[selectedRoomIndex].refresh());
-
-                // This is need to update everything?
-                // socket.to(clientSocket.currentRoom).emit('playersInRoom', returnRoomsPlayerCount());
-                // socket.to(clientSocket.currentRoom).emit('totalPlayersReady', returnTotalPlayersReady(clientSocket.currentRoom));
-
-                // console.log('Should be 0 but idk if I updated it: ' + Rooms['r'+selectedRoomIndex].connectedSockets)
-                // Rooms[clientSocket.currentRoom.charAt(1)].refresh();
             }
         }, 5000)
     }
@@ -209,24 +192,18 @@ socket.on('connection', function(clientSocket){
     clientSocket.on('disconnect', function(){
         // If client was in a room update changes
         leaveNotifyRoom();
-
-        // if(clientSocket.currentRoom != null){
-        //     clientSocket.leave(clientSocket.currentRoom);
-        //     socket.to(clientSocket.currentRoom).emit('playersInRoom', returnRoomsPlayerCount());
-        //     socket.to(clientSocket.currentRoom).emit('totalPlayersReady', returnTotalPlayersReady(clientSocket.currentRoom));
-        //     Rooms[clientSocket.currentRoom.charAt(1)].refresh();
-        // }
     });
 
+    // This function lives here because it directly uses a client property
     function leaveNotifyRoom(){
         if(clientSocket.currentRoom != null){
             clientSocket.leave(clientSocket.currentRoom);
             socket.to(clientSocket.currentRoom).emit('playersInRoom', returnRoomsPlayerCount());
             socket.to(clientSocket.currentRoom).emit('totalPlayersReady', returnTotalPlayersReady(clientSocket.currentRoom));
-            // Rooms[clientSocket.currentRoom.charAt(1)].refresh();
         }
     }
 
+    // Could probably move this
     function kickPlayers(roomName) {
         let players = [];
     
@@ -240,10 +217,8 @@ socket.on('connection', function(clientSocket){
                 players.push(socket.sockets.connected[id]);
             }
     
-            // AUUGHHG
+            // For each player in players change their socket properties
             for (let player of players) {
-                // console.log(player.id +' is part of: ' + player.rooms)
-                // Kick those bitches
                 let currentRoomConnection = player.currentRoom;
                 player.leave(currentRoomConnection);
                 player.currentRoom = null;
@@ -307,8 +282,9 @@ function returnActiveGames(){
     return(activeRooms);
 }
 
-function getConnectedSockets(roomName) {
-    let connectedSockets = [];
+function returnPlayerScores(roomName) {
+    let players = [];
+    let scores = {};
     
     // If the room exists
     if(socket.sockets.adapter.rooms[roomName]){
@@ -317,10 +293,17 @@ function getConnectedSockets(roomName) {
         // For each socket id in the room
         for (let id of Object.keys(roomObj)) {
             // Add player id to players array
-            connectedSockets.push(socket.sockets.connected[id]);
+            players.push(socket.sockets.connected[id]);
+        }
+
+        // For each player check readyStatus
+        for (let player of players) {
+            // Add to dictionary 
+            // console.log(player.id + ': ' + player.score);
+            scores[player.id] = player.score;
         }
     }
-    return(connectedSockets);
+    return(scores);
 }
 
 // Start the server

@@ -12,8 +12,7 @@ var $GameScreen = $('.game-screen');
 var $GameEndScreen = $('.game-end-screen');
 
 // Sub screens
-var $WaitScreen = $('.wait-screen');
-var $ResultsScreen = $('.results-screen');
+var $waitScreen = $('.wait-screen');
 var $waitingRoom = $('.waiting-room');
 var $newRound = $('.new-round');
 
@@ -25,8 +24,10 @@ var $gameStartNotice = $('#gamestart-notice');
 var $roundForm = $('#round-form');
 var $question = $('#q');
 var $answers = $('#ans');
+var $waitStatus = $('#wait-status');
+var $waitResults = $('#wait-screen-results');
 
-
+var $endResults = $('#game-end-screen-results');
 
 var currentRoom = null;
 
@@ -73,37 +74,47 @@ socket.on('notifyGameState', function(msg){
         $gameStartNotice.text(msg)
 })
 
-// socket.on('startGame', function(newRoundData){
-//     $waitingRoom.hide();
-//     $newRound.show();
-//     console.log(newRoundData);
-//     populateRoundForm(newRoundData)
-// });
-
 socket.on('startGame', function(){
-    // $ready.text('Unready');
-    // $playersUnready.text('');
+    $ready.text('Ready');
     $gameStartNotice.text('');
+    $waitStatus.text('Starting game...')
     $waitingRoom.hide();
-    $WaitScreen.show();
+    $waitScreen.show();
 });
 
-socket.on('showResults', function(){
+socket.on('showResults', function(scores){
     $newRound.hide();
-    $WaitScreen.show();
+    $waitScreen.show();
+    $waitResults.show();
+    $waitStatus.text('Intermission results: ');
+    $waitResults.show();
+
+    $waitResults.empty();
+    for(var key in scores) {
+        var value = scores[key];
+        console.log(key + ' ' + value);
+        $waitResults.append('<li>'+ key + ': ' + value + '</li>');
+    }
 });
 
-socket.on('endGame', function(){
+socket.on('endGame', function(scores){
     console.log('Got end game')
     $GameEndScreen.show()
     $GameScreen.hide()
-    // $WaitScreen.hide() ??
-    // newRound.hide() ??
+    $waitResults.hide();
+
+    $endResults.empty();
+    for(var key in scores) {
+        var value = scores[key];
+        console.log(key + ' ' + value);
+        $endResults.append('<li>'+ key + ': ' + value + '</li>');
+    }
 });
 
 socket.on('newRound', function(newRoundData){
     $newRound.show();
-    $WaitScreen.hide();
+    $waitScreen.hide();
+    $waitResults.hide();
     console.log(newRoundData);
     populateRoundForm(newRoundData)
 });
@@ -126,7 +137,7 @@ $leave.on('click', function(){
 
 $leaveEnd.on('click', function(){
     refreshRooms();
-    $WaitScreen.hide();
+    $waitScreen.hide();
     $GameEndScreen.hide();
     $GameScreen.hide();
     $LobbyScreen.show();         
@@ -145,7 +156,8 @@ $answers.on('click', function(e){
             if(callback == true){
                 console.log('Answer recieved from server, wait for new round')
                 $newRound.hide();
-                $WaitScreen.show();
+                $waitScreen.show();
+                $waitStatus.text('Waiting for timeout... ')
             }
         })
     }

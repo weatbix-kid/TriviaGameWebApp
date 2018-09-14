@@ -40,12 +40,17 @@
                 </ul>
             </form>
         </div>
-        <div class='wait-screen' style='display:none'>Waiting for new round</div>
-        <div class='results-screen' style='display:none'>Results go here:</div>
+        <div class='wait-screen' style='display:none'>
+            <div id='wait-status'>
+                status
+            </div>
+            <ul id='wait-screen-results'></ul>
+        </div>
     </div>
 
     <div class='game-end-screen' style='display:none'>
-        Final results go here 
+        Final results go here
+        <ul id='game-end-screen-results'></ul>
         <button id='end-leave'>Leave</button>
     </div>
 
