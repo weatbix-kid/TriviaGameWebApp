@@ -23,6 +23,7 @@ var $gameStartNotice = $('#gamestart-notice');
 
 var $roundForm = $('#round-form');
 var $question = $('#q');
+var $hint = $('#h');
 var $answers = $('#ans');
 var $waitStatus = $('#wait-status');
 var $waitResults = $('#wait-screen-results');
@@ -165,6 +166,7 @@ $answers.on('click', function(e){
 
 function populateRoundForm(roundData){
     $question.text(roundData._question);
+    $hint.text(roundData._hint);
     $answers.children().each(function(index){
         $(this).children().text(roundData._answers[index]);
     });

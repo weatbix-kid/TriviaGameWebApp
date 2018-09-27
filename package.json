@@ -4,8 +4,10 @@
   "description": "A simple multi user english triva game that utilizes socket.io and the oxford dictionary api",
   "author": "Will Macgregor",
   "dependencies": {
+    "dotenv": "^6.0.0",
     "express": "^4.16.3",
     "jquery": "^3.3.1",
+    "request": "^2.88.0",
     "socket.io": "^2.1.1"
   }
 }

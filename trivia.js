@@ -1,8 +1,20 @@
+// Load environment variables 
+if (process.env.NODE_ENV !== 'production') {
+    require('dotenv').load();
+}
+
 // Set up requirements
+const fs = require('fs');
+var request = require('request');
 var express = require('express');
 var app = express();
 var server = require('http').createServer(app);
 var socket = require('socket.io')(server);
+
+const Round = require('./server/js/classes/Round.js');
+const Room = require('./server/js/classes/Room.js');
+
+const path = './server/wordlist_avn_m.txt';
 
 // Define folders used to serve static files
     app.use(express.static('public'));
@@ -10,41 +22,8 @@ var socket = require('socket.io')(server);
 
 // Define a default route
 app.get('/', function(req, res){
-    res.sendFile(__dirname + '/index.html');
+    res.sendFile(__dirname + '/views/index.html');
 });
-
-class RoomProps {
-    constructor(name){
-        this._name = name;
-        this._state = 'lobby';
-        this._round = null;
-        this._roundNumber = 0;
-    }
-
-    incrementRoundNum(){
-        this._roundNumber++;
-    }
-
-    set state(newState){ this._state = newState; }
-    set round(newRound){ this._round = newRound; }
-    set roundNumber(number){ this._roundNumber = number; }
-
-    get state(){ return this._state; }
-    get round(){ return this._round; }
-    get roundNumber(){ return this._roundNumber }
-};
-
-class Round {
-    constructor(question, answers, correctAnswer){
-        this._question = question;
-        this._answers = answers;
-        this._correctAnswer = correctAnswer;
-    }
-
-    get question(){ return this._question; }
-    get answers(){ return this._answers; }
-    get correctAnswer(){ return this._correctAnswer }
-}
 
 RoomTimers = [null, null, null, null];
 Rooms = [null, null, null, null];
@@ -64,7 +43,7 @@ socket.on('connection', function(clientSocket){
             clientSocket.join(selectedRoom);
             clientSocket.currentRoom = selectedRoom;
             joinedRoom(true);
-            Rooms.splice(selectedRoomIndex, 1, new RoomProps(selectedRoom));
+            Rooms.splice(selectedRoomIndex, 1, new Room(selectedRoom));
             console.log('A user created and joined room ' + selectedRoom)
             socket.to(selectedRoom).emit('playersInRoom', returnRoomsPlayerCount());
             socket.to(selectedRoom).emit('totalPlayersReady', returnTotalPlayersReady(selectedRoom));
@@ -118,14 +97,13 @@ socket.on('connection', function(clientSocket){
                 console.log('Initating game loop');
                 Rooms[selectedRoomIndex].state = 'in-game';
                 socket.to(clientSocket.currentRoom).emit('startGame'); 
-                RoomTimers.splice(selectedRoomIndex, 1, setInterval(initiateGameLoop, 10000));
+                RoomTimers.splice(selectedRoomIndex, 1, setInterval(initiateGameLoop, 20000));
             }, 5000));
         }
         else {
             console.log('Canceling ready timer for room ' + selectedRoomIndex)
             socket.to(clientSocket.currentRoom).emit('totalPlayersReady', returnTotalPlayersReady(clientSocket.currentRoom));
             socket.to(clientSocket.currentRoom).emit('notifyGameState');
-            // Stop timer for specific room
 
             // Stops the 5 second timer if readyplayers != total players
             clearTimeout(RoomTimers[selectedRoomIndex]);
@@ -141,18 +119,25 @@ socket.on('connection', function(clientSocket){
         socket.to(clientSocket.currentRoom).emit('showResults', returnPlayerScores(clientSocket.currentRoom));
         console.log('emitting new round in 5');
         TestTimer = setTimeout(function(){ 
-            if(Rooms[selectedRoomIndex].roundNumber <= 1){ // 3 means 4 rounds
-                var newRound = new Round('Is this a placeholder question?', ['Yes', 'No', 'Maybe', 'I Dont Know'], 2);
-                // Rooms[selectedRoomIndex].state = 'in-game';
-                Rooms[selectedRoomIndex].round = newRound;
-                Rooms[selectedRoomIndex].incrementRoundNum();
-                console.log('New stuff! /n ' + Rooms[selectedRoomIndex].state + '/n '+ Rooms[selectedRoomIndex].round + '/n '+ Rooms[selectedRoomIndex].roundNumber)
-                socket.to(clientSocket.currentRoom).emit('newRound', newRound);  
+            if(Rooms[selectedRoomIndex].roundNumber <= 4){ // 5 rounds
+                createNewRound(function(returnValue){
+                    if (returnValue != null){
+                        Rooms[selectedRoomIndex].round = returnValue;
+                        Rooms[selectedRoomIndex].incrementRoundNum();
+                        console.log(Rooms[selectedRoomIndex].name + ': Round ' +Rooms[selectedRoomIndex].roundNumber)
+                        socket.to(clientSocket.currentRoom).emit('newRound', returnValue);  
+                    }
+                    else{
+                        console.log('round was null') // This shouldnt have to happen
+                    }
+                    
+                });
             }
             else {
                 // Stop all timers
                 clearInterval(RoomTimers[selectedRoomIndex]); // Works now what??
 
+                // Emit end game event
                 console.log('Game ended');
                 socket.to(clientSocket.currentRoom).emit('endGame', returnPlayerScores(clientSocket.currentRoom));
 
@@ -166,23 +151,18 @@ socket.on('connection', function(clientSocket){
     clientSocket.on('roundResponse', function(clientResponse, callback){
         let selectedRoomIndex = clientSocket.currentRoom.charAt(1);
         let answer = clientResponse.charAt(1);
+        let currentRound = Rooms[selectedRoomIndex].round;
 
-        console.log('Recieved response from ' + clientSocket.currentRoom + ': ' + answer);
-        var currentRound = Rooms[selectedRoomIndex].round;
-        if(currentRound.correctAnswer == answer){
-            console.log('Correct!')
+        // Check the clients response against the correct answer 
+        if(currentRound.correctAnswer == answer)
             clientSocket.score++;
-            console.log(clientSocket.score);
-        }
-        else{
-            // console.log('Incorrect!!')
-        }
         callback(true);
     });
 
     clientSocket.on('leaveRoom',function(){
         // If client was in a room update changes
         leaveNotifyRoom();
+
         // Reset the client socket's properties
         clientSocket.currentRoom = null;
         clientSocket.readyStatus = false;
@@ -226,6 +206,138 @@ socket.on('connection', function(clientSocket){
                 player.score = 0;
             }
         }
+    }
+
+    // Responsible for requesting and consuming data from the Oxford Dictionary API
+    function createNewRound(callback){
+        let randomIndex = Math.floor((Math.random() * wordlist.length) + 0);
+        let randomWord = wordlist[randomIndex];
+        console.log('Index: ' + randomIndex + ' Word: ' + randomWord);
+    
+        // Request URL for definition of random word
+        var url1 = {
+            url: 'https://od-api.oxforddictionaries.com:443/api/v1/entries/en/' + randomWord.toLowerCase(),
+            headers: {
+              'app_id': process.env.OD_API_ID,
+              'app_key': process.env.OD_API_KEY
+            }
+        };
+    
+        // Request URL for synonyms of random word
+        var url2 = {
+            url: 'https://od-api.oxforddictionaries.com:443/api/v1/entries/en/' + randomWord.toLowerCase() + '/synonyms',
+            headers: {
+                'app_id': process.env.OD_API_ID,
+                'app_key': process.env.OD_API_KEY
+            }
+        };
+
+        // Request for definition
+        request(url1, (error, response, body) => {
+            // If the response is successful
+            if (!error && response.statusCode == 200) {
+                var info = JSON.parse(body);
+
+                let question = '';
+                let example = '';
+
+                try {
+                    question = info.results[0].lexicalEntries[0].entries[0].senses[0].definitions[0];
+                } catch (error) {
+                    console.log(error + '\n' + randomWord + ' is a shit word and must be purged as it doesnt have a definition')
+                    callback(null);
+                }
+                
+                try {
+                    example = info.results[0].lexicalEntries[0].entries[0].senses[0].examples[0].text;
+                } catch (error) {
+                    console.log(err);
+                    console.log('No example, couldnt make hint')
+                    example = '';
+                }
+                
+                let possibleAnswers = [];
+                let regex = new RegExp(randomWord,'gi');
+                let hint = example.replace(regex, '___');
+
+                console.log('----------------')
+                console.log('Definition: ' + question + '\n' + 'Hint: ' + hint);
+
+                // Request for synonyms
+                request(url2, (error, response, body) => {
+                    if (!error && response.statusCode == 200) {
+                        var info = JSON.parse(body);
+            
+                        let synonyms = info.results[0].lexicalEntries[0].entries[0].senses[0].synonyms
+
+                        // For each synonym
+                        for (let index = 0; index < synonyms.length; index++) {
+                            isBad = false; 
+                            // Check the word for spaces, hyphens and commas
+                            for (let char = 0; char < synonyms[index].text.length; char++) {
+                                if (synonyms[index].text[char] == ' ' || synonyms[index].text[char] == '-' || synonyms[index].text[char] == ','){
+                                    isBad = true;
+                                    break;
+                                }
+                            }
+                            // If the word is acceptable add it as a possible answer until there are 3
+                            if (!isBad && possibleAnswers.length <= 2){
+                                possibleAnswers.push(synonyms[index].text)
+                            }   
+                        }
+            
+                        // If we dont have enough answers randomly select some more until we have 3
+                        if (possibleAnswers.length <= 2){
+                            console.log('Still need more answers')
+                            while (possibleAnswers.length <= 2) {
+                                let r = Math.floor((Math.random() * wordlist.length))
+                                console.log(wordlist[r]);
+                                possibleAnswers.push(wordlist[r]);
+                            }
+                        }
+                        else {
+                            console.log('Has enough answers')
+                        }
+                        
+                        possibleAnswers.push(randomWord);
+        
+                        var answers = shuffleAnswers(possibleAnswers);
+
+                        console.log('shuffled answers: ' + answers);
+                        console.log('----------------')
+
+                        // Serve the round
+                        var newRound = new Round(question, hint , possibleAnswers, possibleAnswers.indexOf(randomWord));
+                        // console.log(newRound);
+                        callback(newRound);
+                    }
+                    else {
+                        console.log('Word has no synonyms, getting random answers');
+
+                        if (possibleAnswers.length <= 2){
+                            console.log('Still need more answers')
+                            while (possibleAnswers.length <= 2) {
+                                let r = Math.floor((Math.random() * wordlist.length))
+                                console.log(wordlist[r]);
+                                possibleAnswers.push(wordlist[r]);
+                            }
+                        }
+
+                        possibleAnswers.push(randomWord);
+
+                        // createNewRound();
+                        var newRound = new Round(question, hint , possibleAnswers, possibleAnswers.indexOf(randomWord));
+                        callback(newRound);
+                    }
+                });
+            }
+            else {
+                // createNewRound();
+                console.log(error);
+                console.log(randomWord);
+                callback(null); // We should never reach this point but if we do return null so it doesnt crash
+            }
+        });
     }
 });
 
@@ -298,15 +410,46 @@ function returnPlayerScores(roomName) {
 
         // For each player check readyStatus
         for (let player of players) {
-            // Add to dictionary 
-            // console.log(player.id + ': ' + player.score);
+            // Add to dictionary
             scores[player.id] = player.score;
         }
     }
     return(scores);
 }
 
+function shuffleAnswers(answers) {
+    var currentIndex = answers.length, temporaryValue, randomIndex;
+  
+    // While there remain elements to shuffle...
+    while (0 !== currentIndex) {
+  
+      // Pick a remaining element...
+      randomIndex = Math.floor(Math.random() * currentIndex);
+      currentIndex -= 1;
+  
+      // And swap it with the current element.
+      temporaryValue = answers[currentIndex];
+      answers[currentIndex] = answers[randomIndex];
+      answers[randomIndex] = temporaryValue;
+    }
+    return answers;
+}
+
+console.log('Environment variables ready:', process.env.OD_API_ID);
+
 // Start the server
 server.listen(3000, function(){
     console.log('server listening on *:3000')
 });
+
+// Read wordlist.txt and create a wordlist array
+fs.stat(path, function(error, stats) {
+    fs.open(path, "r", function(error, fd) {
+     var buffer = new Buffer(stats.size);
+      fs.read(fd, buffer, 0, buffer.length, null, function(error, bytesRead, buffer) {
+        var data = buffer.toString("utf8");
+        wordlist = data.split(',');
+        console.log('Wordlist ready');
+      });
+    });
+  });
